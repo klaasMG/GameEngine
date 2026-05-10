@@ -1,11 +1,11 @@
 #include "renderer.h"
 #include <iostream>
-#include <cmath>
-#include <cstdlib>
+#include "vendor/glm/glm.hpp"
+#include "vendor/glm/gtc/matrix_transform.hpp"
 #include <vector>
 
 const char* vertexShaderSource = R"(
-    #version 330 core
+    #version 430 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aUV;
     layout (location = 2) in float aObjId;
@@ -18,16 +18,21 @@ const char* vertexShaderSource = R"(
         mat4 view_matrix;
     };
 
+    layout(std430, binding = 0) buffer ObjectMatrices {
+        mat4 model_matrices[];
+    };
+
     void main() {
         vUV = aUV;
         vObjId = aObjId;
-
-        gl_Position = view_matrix * position_matrix * vec4(aPos, 1.0);
+        int ivObjId = int(vObjId);
+        mat4 model_matrix = model_matrices[ivObjId];
+        gl_Position = view_matrix * position_matrix * model_matrix * vec4(aPos, 1.0);
     }
 )";
 
 const char* fragmentShaderSource = R"(
-    #version 330 core
+    #version 430 core
     in vec2 vUV;
     in float vObjId;
     out vec4 FragColor;
@@ -49,6 +54,34 @@ Renderer::~Renderer() {
     cleanup();
 }
 
+void Renderer::setup_render_data_ssbo() {
+    glGenBuffers(1, &SSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
+
+    // Allocate storage (example: 100 structs)
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * 100, nullptr, GL_DYNAMIC_DRAW);
+
+    // Bind to binding point 0
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
+
+    // Optional: upload initial data
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(ObjectRenderData) * objects_render_data.size(), objects_render_data.data());
+
+    // Cleanup bind
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
+void Renderer::update_render_data_ssbo() {
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(ObjectRenderData) * objects_render_data.size(), objects_render_data.data());
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
+void Renderer::destroy_render_data_ssbo() {
+    glDeleteBuffers(1, &SSBO);
+    SSBO = 0;
+}
+
 void Renderer::framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
@@ -59,7 +92,7 @@ bool Renderer::initGLFW() {
         return false;
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
@@ -174,23 +207,18 @@ void Renderer::destroy_camera_ubo() {
 
 bool Renderer::initialize() {
     if (!initGLFW()) return false;
-    Camera camera = {.position_matrix =
-        glm::mat4x4(
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f
-        ),.view_matrix =
-        glm::mat4x4(
-            1.0f, 0.0f, 0.0f, 0.0f,
-            0.0f, 1.0f, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f
-        )
+
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
+
+    Camera camera = {.projection_matrix =
+        glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 5000.0f)
+        ,.view_matrix = glm::mat4x4(1.0f, 0.0f, 0.0f, 0.0f,0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f)
     };
     set_camera(camera);
     setup_shaders();
     create_camera_ubo();
+    setup_render_data_ssbo();
     std::vector<float> vertices = {
         -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 0.0f,
          0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
@@ -290,8 +318,30 @@ void Renderer::run() {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, true);
         }
+        Camera camera = active_camera;
+        float moveSpeed = 0.001f;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, 0.0f, moveSpeed));
+        }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, 0.0f, -moveSpeed));
+        }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(moveSpeed, 0.0f, 0.0f));
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(-moveSpeed, 0.0f, 0.0f));
+        }
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, -moveSpeed, 0.0f));
+        }
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, moveSpeed, 0.0f));
+        }
+        set_camera(camera);
         update_triangle(vertices);
         update_camera_ubo();
+        update_render_data_ssbo();
 
         glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -306,6 +356,7 @@ void Renderer::run() {
 }
 
 void Renderer::cleanup() {
+    destroy_render_data_ssbo();
     destroy_camera_ubo();
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
