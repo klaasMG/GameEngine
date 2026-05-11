@@ -14,7 +14,7 @@ const char* vertexShaderSource = R"(
     out float vObjId;
 
     layout (std140) uniform CameraData {
-        mat4 position_matrix;
+        mat4 projection_matrix;
         mat4 view_matrix;
     };
 
@@ -27,7 +27,7 @@ const char* vertexShaderSource = R"(
         vObjId = aObjId;
         int ivObjId = int(vObjId);
         mat4 model_matrix = model_matrices[ivObjId];
-        gl_Position = view_matrix * position_matrix * model_matrix * vec4(aPos, 1.0);
+        gl_Position = projection_matrix * view_matrix * model_matrix * vec4(aPos, 1.0);
     }
 )";
 
@@ -42,12 +42,14 @@ const char* fragmentShaderSource = R"(
     }
 )";
 
-Renderer::Renderer() {
+Renderer::Renderer(std::shared_ptr<RenderQueue>& render_queue_in) {
     window = nullptr;
     shaderProgram = 0;
     VAO = 0;
     VBO = 0;
     cameraUBO = 0;
+    SSBO = 0;
+    render_queue = render_queue_in;
 }
 
 Renderer::~Renderer() {
@@ -86,6 +88,34 @@ void Renderer::framebuffer_size_callback(GLFWwindow* window, int width, int heig
     glViewport(0, 0, width, height);
 }
 
+void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+    Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
+    double deltaX = xpos - renderer->lastMouseX;
+    double deltaY = ypos - renderer->lastMouseY;
+    renderer->lastMouseX = xpos;
+    renderer->lastMouseY = ypos;
+
+    Camera camera = renderer->active_camera;
+
+    camera.yaw += deltaX * renderer->sensitivity;
+    camera.pitch -= deltaY * renderer->sensitivity;
+
+    if (camera.pitch > 89.0f) camera.pitch = 89.0f;
+    if (camera.pitch < -89.0f) camera.pitch = -89.0f;
+
+    float yawRad = glm::radians(camera.yaw);
+    float pitchRad = glm::radians(camera.pitch);
+
+    glm::vec3 front;
+    front.x = cos(yawRad) * cos(pitchRad);
+    front.y = sin(pitchRad);
+    front.z = sin(yawRad) * cos(pitchRad);
+
+    glm::vec3 cameraTarget = camera.position + glm::normalize(front);
+    camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+    renderer->set_camera(camera);
+}
+
 bool Renderer::initGLFW() {
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
@@ -97,6 +127,7 @@ bool Renderer::initGLFW() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     window = glfwCreateWindow(800, 600, "Triangle Renderer", nullptr, nullptr);
+    glfwSetWindowUserPointer(window, this);
     if (!window) {
         std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
@@ -105,6 +136,8 @@ bool Renderer::initGLFW() {
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD\n";
@@ -211,11 +244,26 @@ bool Renderer::initialize() {
     int width, height;
     glfwGetWindowSize(window, &width, &height);
 
-    Camera camera = {.projection_matrix =
-        glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 5000.0f)
-        ,.view_matrix = glm::mat4x4(1.0f, 0.0f, 0.0f, 0.0f,0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f)
+    Camera camera = {
+        .projection_matrix = glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 5000.0f),
+        .view_matrix = glm::mat4(1.0f),
+        .position = glm::vec3(0.0f, 0.0f, 3.0f),
+        .yaw = 0.0f,
+        .pitch = 0.0f
     };
+    lastMouseX = width / 2.0;
+    lastMouseY = height / 2.0;
     set_camera(camera);
+
+    float yawRad = glm::radians(camera.yaw);
+    float pitchRad = glm::radians(camera.pitch);
+    glm::vec3 front;
+    front.x = cos(yawRad) * cos(pitchRad);
+    front.y = sin(pitchRad);
+    front.z = sin(yawRad) * cos(pitchRad);
+    camera.view_matrix = glm::lookAt(camera.position, camera.position + glm::normalize(front), glm::vec3(0.0f, 1.0f, 0.0f));
+    set_camera(camera);
+
     setup_shaders();
     create_camera_ubo();
     setup_render_data_ssbo();
@@ -320,24 +368,36 @@ void Renderer::run() {
         }
         Camera camera = active_camera;
         float moveSpeed = 0.001f;
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, 0.0f, moveSpeed));
-        }
+
+        float yawRad = glm::radians(camera.yaw);
+        glm::vec3 forward(cos(yawRad), 0.0f, sin(yawRad));
+        glm::vec3 right(sin(yawRad), 0.0f, -cos(yawRad));
+
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, 0.0f, -moveSpeed));
+            camera.position -= forward * moveSpeed;
+        }
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            camera.position += forward * moveSpeed;
         }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(moveSpeed, 0.0f, 0.0f));
+            camera.position += right * moveSpeed;
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(-moveSpeed, 0.0f, 0.0f));
+            camera.position -= right * moveSpeed;
         }
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, -moveSpeed, 0.0f));
+            camera.position.y += moveSpeed;
         }
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
-            camera.projection_matrix = glm::translate(camera.projection_matrix, glm::vec3(0.0f, moveSpeed, 0.0f));
+            camera.position.y -= moveSpeed;
         }
+        float pitchRad = glm::radians(camera.pitch);
+        glm::vec3 front;
+        front.x = cos(yawRad) * cos(pitchRad);
+        front.y = sin(pitchRad);
+        front.z = sin(yawRad) * cos(pitchRad);
+        glm::vec3 cameraTarget = camera.position + glm::normalize(front);
+        camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
         set_camera(camera);
         update_triangle(vertices);
         update_camera_ubo();
