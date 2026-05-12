@@ -1,9 +1,10 @@
 #include "game_simulation.h"
 
 #include "renderer.h"
+#include <mutex>
 
 GameSimulation::GameSimulation(std::shared_ptr<RenderQueue> render_queue_in) {
-    render_queue = std::move(render_queue_in);
+    render_queue = render_queue_in;
     registry = entt::registry();
     running = true;
 }
@@ -58,7 +59,9 @@ void GameSimulation::run() {
         if (!is_first_data_send) {
             Mesh mesh = Mesh{.mesh = vertices};
             RenderId render_id = RenderId{.render_id = 0};
-            //render_queue->send_mesh(mesh, render_id);
+            render_queue->send_mesh(mesh, render_id);
+            RenderData render_data = RenderData{.model_matrix = object_render_data.model_matrix};
+            render_queue->send_render_data(render_data, render_id);
             is_first_data_send = true;
         }
     }
@@ -69,6 +72,7 @@ void GameSimulation::stop() {
 }
 
 event_available_type RenderQueue::is_event_available() {
+    std::lock_guard<std::mutex> lock(mutex);
     if (!mesh_queue.empty()) {
         return event_available_type::MESH;
     } else if (!render_data_queue.empty()) {
@@ -77,17 +81,33 @@ event_available_type RenderQueue::is_event_available() {
     return event_available_type::NONE;
 }
 
+void RenderQueue::wait_for_event() {
+    std::unique_lock<std::mutex> lock(mutex);
+    cv.wait(lock, [this] {
+        return !mesh_queue.empty() || !render_data_queue.empty();
+    });
+}
+
 void RenderQueue::send_render_data(const RenderData& render_data, RenderId render_id) {
-    RenderDataAndId render_data_and_id = RenderDataAndId{.render_data = render_data, .render_id = render_id.render_id};
-    render_data_queue.push(render_data_and_id);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        RenderDataAndId render_data_and_id = RenderDataAndId{.render_data = render_data, .render_id = render_id.render_id};
+        render_data_queue.push(render_data_and_id);
+    }
+    cv.notify_one();
 }
 
 void RenderQueue::send_mesh(const Mesh& mesh, RenderId render_id) {
-    MeshAndId mesh_and_id = MeshAndId{.mesh = mesh.mesh, .render_id = render_id.render_id};
-    mesh_queue.push(mesh_and_id);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        MeshAndId mesh_and_id = MeshAndId{.mesh = mesh.mesh, .render_id = render_id.render_id};
+        mesh_queue.push(mesh_and_id);
+    }
+    cv.notify_one();
 }
 
 Result<RenderDataAndId> RenderQueue::get_render_data() {
+    std::lock_guard<std::mutex> lock(mutex);
     if (render_data_queue.empty()) {
         ErrorType error_type = ErrorType::QUEUE_EMPTY;
         return Result<RenderDataAndId>{error_type};
@@ -98,6 +118,7 @@ Result<RenderDataAndId> RenderQueue::get_render_data() {
 }
 
 Result<MeshAndId> RenderQueue::get_mesh() {
+    std::lock_guard<std::mutex> lock(mutex);
     if (mesh_queue.empty()) {
         ErrorType error_type = ErrorType::QUEUE_EMPTY;
         return Result<MeshAndId>{error_type};

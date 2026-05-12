@@ -1,5 +1,7 @@
 #pragma once
 #include <queue>
+#include <mutex>
+#include <condition_variable>
 #include "lib/Error.h"
 #include "entt/entt.hpp"
 #include "vendor/glm/glm.hpp"
@@ -39,9 +41,12 @@ public:
     Result<RenderDataAndId> get_render_data();
     Result<MeshAndId> get_mesh();
     event_available_type is_event_available();
+    void wait_for_event();
 private:
     std::queue<RenderDataAndId> render_data_queue;
     std::queue<MeshAndId> mesh_queue;
+    std::mutex mutex;
+    std::condition_variable cv;
 };
 
 class GameSimulation {

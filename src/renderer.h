@@ -37,7 +37,7 @@ private:
     double lastMouseY = 300.0;
     float sensitivity = 0.1f;
     std::vector<ObjectRenderData> objects_render_data = {ObjectRenderData{.model_matrix = glm::mat4(1.0f)}};
-    std::vector<std::vector<float>> object_vertex_data;
+    std::vector<std::vector<float>> object_vertex_data = {{}};
     static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
     static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
     bool initGLFW();
