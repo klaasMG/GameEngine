@@ -18,21 +18,11 @@ macro(add_EnTT)
     target_link_libraries(GameEngine PRIVATE EnTT::EnTT)
 endmacro()
 
-add_library(common_lib
-        lib/Error.cpp
-        lib/Error.h
-)
-
-target_include_directories(common_lib PUBLIC
-    ${CMAKE_SOURCE_DIR}/lib/cpp_base
-)
-
 add_executable(GameEngine src/main.cpp
         src/renderer.cpp
         src/renderer.h
-        src/game_simulation.cpp)
-
-target_link_libraries(GameEngine PRIVATE common_lib)
+        src/game_simulation.cpp
+        lib/Error.h)
 
 target_include_directories(GameEngine PRIVATE
     ${CMAKE_SOURCE_DIR}

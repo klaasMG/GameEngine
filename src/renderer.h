@@ -19,13 +19,12 @@ struct ObjectRenderData {
 
 class Renderer {
 public:
-    Renderer(std::shared_ptr<RenderQueue>& render_queue_in);
+    Renderer(std::shared_ptr<RenderQueue> render_queue_in);
     ~Renderer();
     bool initialize();
     void run();
     void cleanup();
     void set_camera(Camera camera);
-
 private:
     std::shared_ptr<RenderQueue> render_queue;
     GLFWwindow* window;

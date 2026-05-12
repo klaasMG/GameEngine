@@ -26,12 +26,19 @@ struct MeshAndId {
     size_t render_id;
 };
 
+enum class event_available_type {
+    NONE = 0,
+    MESH = 1,
+    RENDER_DATA = 2,
+};
+
 class RenderQueue {
 public:
     void send_render_data(const RenderData& render_data, RenderId render_id);
     void send_mesh(const Mesh& mesh, RenderId render_id);
     Result<RenderDataAndId> get_render_data();
     Result<MeshAndId> get_mesh();
+    event_available_type is_event_available();
 private:
     std::queue<RenderDataAndId> render_data_queue;
     std::queue<MeshAndId> mesh_queue;
@@ -39,9 +46,11 @@ private:
 
 class GameSimulation {
 public:
-    GameSimulation();
-    ~GameSimulation();
+    GameSimulation(std::shared_ptr<RenderQueue> render_queue_in);
     void run();
+    void stop();
 private:
     entt::registry registry;
+    std::shared_ptr<RenderQueue> render_queue;
+    bool running;
 };

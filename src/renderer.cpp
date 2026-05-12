@@ -42,14 +42,14 @@ const char* fragmentShaderSource = R"(
     }
 )";
 
-Renderer::Renderer(std::shared_ptr<RenderQueue>& render_queue_in) {
+Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
     window = nullptr;
     shaderProgram = 0;
     VAO = 0;
     VBO = 0;
     cameraUBO = 0;
     SSBO = 0;
-    render_queue = render_queue_in;
+    render_queue = std::move(render_queue_in);
 }
 
 Renderer::~Renderer() {
@@ -360,13 +360,43 @@ void Renderer::run() {
         -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 0.0f,
         -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, 0.0f
     };
-
     while (!glfwWindowShouldClose(window)) {
-
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, true);
         }
         Camera camera = active_camera;
+        while (event_available_type::NONE != render_queue->is_event_available()) {
+            event_available_type event_type = render_queue->is_event_available();
+            if (event_type == event_available_type::MESH) {
+                Result<MeshAndId> mesh_and_id_result = render_queue->get_mesh();
+                ErrorType error_type = mesh_and_id_result.check_error();
+                if (error_type != ErrorType::OK) {
+                    std::cout << ErrorType_to_string(error_type) << std::endl;
+                    mesh_and_id_result.Handle_Error();
+                }
+                MeshAndId mesh_and_id = mesh_and_id_result.GetData();
+                size_t id =  mesh_and_id.render_id;
+                if (object_vertex_data.size() < id) {
+                    object_vertex_data.resize(id);
+                }
+                object_vertex_data[id] = mesh_and_id.mesh.mesh;
+            }
+            if (event_type == event_available_type::RENDER_DATA) {
+                Result<RenderDataAndId> render_data_and_id_result = render_queue->get_render_data();
+                ErrorType error_type = render_data_and_id_result.check_error();
+                if (error_type != ErrorType::OK) {
+                    std::cout << ErrorType_to_string(error_type) << std::endl;
+                    render_data_and_id_result.Handle_Error();
+                }
+                RenderDataAndId render_data_and_id = render_data_and_id_result.GetData();
+                size_t id = render_data_and_id.render_id;
+                if (object_vertex_data.size() < id) {
+                    object_vertex_data.resize(id);
+                }
+                ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = render_data_and_id.render_data.model_matrix,};
+                objects_render_data[id] = object_render_data;
+            }
+        }
         float moveSpeed = 0.001f;
 
         float yawRad = glm::radians(camera.yaw);
