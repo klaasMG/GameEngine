@@ -1,5 +1,6 @@
+#include <windows.h>
+#pragma comment(lib, "winmm.lib")
 #include "game_simulation.h"
-
 #include "renderer.h"
 #include <mutex>
 
@@ -55,16 +56,28 @@ void GameSimulation::run() {
     };
     ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = glm::mat4(1.0f)};
     bool is_first_data_send = false;
+    using clock = std::chrono::high_resolution_clock;
     while (running) {
+        clock::time_point start = clock::now();
+        clock::time_point target = start + std::chrono::milliseconds(10);
         if (!is_first_data_send) {
-            Mesh mesh = Mesh{.mesh = vertices};
-            RenderId render_id = RenderId{.render_id = 0};
+            Mesh mesh{.mesh = vertices};
+            RenderId render_id{.render_id = 0};
             render_queue->send_mesh(mesh, render_id);
-            RenderData render_data = RenderData{.model_matrix = object_render_data.model_matrix};
+            RenderData render_data{
+                .model_matrix = object_render_data.model_matrix
+            };
             render_queue->send_render_data(render_data, render_id);
             is_first_data_send = true;
         }
+        while (clock::now() < target) {
+            std::this_thread::yield();
+        }
+        clock::time_point end = clock::now();
+        std::chrono::microseconds real = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        std::cout << "real loop: " << real.count() << " us\n";
     }
+
 }
 
 void GameSimulation::stop() {

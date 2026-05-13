@@ -4,6 +4,23 @@
 #include "vendor/glm/gtc/matrix_transform.hpp"
 #include <vector>
 
+std::vector<float> flatten_vector(const std::vector<std::vector<float>>& input) {
+    std::vector<float> output;
+
+    size_t total_size = 0;
+    for (const auto& row : input) {
+        total_size += row.size();
+    }
+
+    output.reserve(total_size);
+
+    for (const auto& row : input) {
+        output.insert(output.end(), row.begin(), row.end());
+    }
+
+    return output;
+}
+
 const char* vertexShaderSource = R"(
     #version 430 core
     layout (location = 0) in vec3 aPos;

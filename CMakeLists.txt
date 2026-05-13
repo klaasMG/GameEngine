@@ -30,5 +30,6 @@ target_include_directories(GameEngine PRIVATE
 add_glad()
 add_glfw()
 add_EnTT()
+target_link_libraries(GameEngine PRIVATE winmm)
 message(STATUS "build the project")
 message(STATUS "dj")
