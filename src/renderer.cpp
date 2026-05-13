@@ -8,13 +8,13 @@ std::vector<float> flatten_vector(const std::vector<std::vector<float>>& input) 
     std::vector<float> output;
 
     size_t total_size = 0;
-    for (const auto& row : input) {
+    for (const std::vector<float>& row : input) {
         total_size += row.size();
     }
 
     output.reserve(total_size);
 
-    for (const auto& row : input) {
+    for (const std::vector<float>& row : input) {
         output.insert(output.end(), row.begin(), row.end());
     }
 
@@ -446,7 +446,8 @@ void Renderer::run() {
         glm::vec3 cameraTarget = camera.position + glm::normalize(front);
         camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
         set_camera(camera);
-        update_triangle(vertices);
+        std::vector<float> vertices_in = flatten_vector(object_vertex_data);
+        update_triangle(vertices_in);
         update_camera_ubo();
         update_render_data_ssbo();
 
@@ -455,7 +456,7 @@ void Renderer::run() {
 
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 6);
+        glDrawArrays(GL_TRIANGLES, 0, vertices_in.size() / 6);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
