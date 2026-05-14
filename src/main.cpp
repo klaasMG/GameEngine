@@ -1,6 +1,7 @@
 #include "Renderer.h"
 #include "game_simulation.h"
 #include <thread>
+#include "texture_loader.h"
 
 int main() {
     std::shared_ptr<RenderQueue> render_queue_ptr = std::make_shared<RenderQueue>();

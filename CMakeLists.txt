@@ -22,7 +22,10 @@ add_executable(GameEngine src/main.cpp
         src/renderer.cpp
         src/renderer.h
         src/game_simulation.cpp
-        lib/Error.h)
+        lib/Error.h
+        vendor/stb_image/stb_image.h
+        src/texture_loader.cpp
+        src/texture_loader.h)
 
 target_include_directories(GameEngine PRIVATE
     ${CMAKE_SOURCE_DIR}

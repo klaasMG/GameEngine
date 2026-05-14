@@ -4,6 +4,7 @@
 #include "vendor/glfw/include/GLFW/glfw3.h"
 #include "vendor/glm/glm.hpp"
 #include "game_simulation.h"
+#include "texture_loader.h"
 
 struct Camera {
     glm::mat4x4 projection_matrix;
@@ -26,6 +27,7 @@ public:
     void cleanup();
     void set_camera(Camera camera);
 private:
+    LoadedImage block_texture;
     std::shared_ptr<RenderQueue> render_queue;
     GLFWwindow* window;
     GLuint shaderProgram;

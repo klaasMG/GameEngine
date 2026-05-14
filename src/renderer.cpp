@@ -1,7 +1,7 @@
 #include "renderer.h"
-#include <iostream>
 #include "vendor/glm/glm.hpp"
 #include "vendor/glm/gtc/matrix_transform.hpp"
+#include <iostream>
 #include <vector>
 
 std::vector<float> flatten_vector(const std::vector<std::vector<float>>& input) {
@@ -60,6 +60,7 @@ const char* fragmentShaderSource = R"(
 )";
 
 Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
+    block_texture = load_textures("assets/textures/icon_16x16.png");
     window = nullptr;
     shaderProgram = 0;
     VAO = 0;
