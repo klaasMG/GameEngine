@@ -27,16 +27,10 @@ LoadedImage load_png_rgba(const std::string& path) {
     image.height = height;
     image.channels = 4;
     image.data.assign(pixels, pixels + size);
-
-    stbi_image_free(pixels);
-
-    return image;
-}
-
-LoadedImage load_textures(const fs::path& path) {
-    LoadedImage image = load_png_rgba(path.string());
     if (image.height % 16 != 0 || image.width % 16 != 0) {
         throw std::runtime_error("the image must be a multipule of 16 in width and height");
     }
-    return std::move(image);
+    stbi_image_free(pixels);
+
+    return image;
 }

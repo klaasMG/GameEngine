@@ -72,4 +72,4 @@ private:
     }
 };
 
-LoadedImage load_textures(const fs::path& path);
+LoadedImage load_png_rgba(const std::string& path);
