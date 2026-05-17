@@ -1,4 +1,7 @@
 #include "renderer.h"
+
+#include <fstream>
+
 #include "vendor/glm/glm.hpp"
 #include "vendor/glm/gtc/matrix_transform.hpp"
 #include <iostream>
@@ -31,6 +34,7 @@ const char* vertexShaderSource = R"(
     out vec2 vUV;
     out float vObjId;
     out float vBlockId;
+    out vec3 vPos;
 
     layout (std140) uniform CameraData {
         mat4 projection_matrix;
@@ -42,6 +46,7 @@ const char* vertexShaderSource = R"(
     };
 
     void main() {
+        vPos = aPos;
         vUV = aUV;
         vObjId = aObjId;
         vBlockId = aBlockId;
@@ -53,6 +58,7 @@ const char* vertexShaderSource = R"(
 
 const char* fragmentShaderSource = R"(
     #version 430 core
+    in vec3 vPos;
     in vec2 vUV;
     in float vObjId;
     in float vBlockId;
@@ -60,8 +66,8 @@ const char* fragmentShaderSource = R"(
     uniform sampler2D uBlockTextureAtlas;
 
     void main() {
-        float tileX = mod(vBlockId, 16.0);
-        float tileY = floor(vBlockId / 16.0);
+        float tileX = mod(vBlockId - 1.0, 16.0);
+        float tileY = floor((vBlockId - 1.0) / 16.0);
         vec2 atlasUV = vUV + vec2(tileX, tileY) / 16.0;
         vec4 texColor = texture(uBlockTextureAtlas, atlasUV);
         FragColor = texColor;
@@ -78,8 +84,8 @@ Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
     render_queue = render_queue_in;
 }
 
-Renderer::~Renderer() {
-    if (block_texture) {
+Renderer::~Renderer(){
+    if (block_texture){
         block_texture->destroy();
         delete block_texture;
         block_texture = nullptr;
@@ -91,7 +97,7 @@ void Renderer::setup_render_data_ssbo() {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
 
     // Allocate storage (example: 100 structs)
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * 100, nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * objects_render_data.size(), nullptr, GL_DYNAMIC_DRAW);
 
     // Bind to binding point 0
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
@@ -130,8 +136,12 @@ void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     camera.yaw += deltaX * renderer->sensitivity;
     camera.pitch -= deltaY * renderer->sensitivity;
 
-    if (camera.pitch > 89.0f) camera.pitch = 89.0f;
-    if (camera.pitch < -89.0f) camera.pitch = -89.0f;
+    if (camera.pitch > 89.0f){
+        camera.pitch = 89.0f;
+    }
+    if (camera.pitch < -89.0f){
+        camera.pitch = -89.0f;
+    }
 
     float yawRad = glm::radians(camera.yaw);
     float pitchRad = glm::radians(camera.pitch);
@@ -146,8 +156,8 @@ void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     renderer->set_camera(camera);
 }
 
-bool Renderer::initGLFW() {
-    if (!glfwInit()) {
+bool Renderer::initGLFW(){
+    if (!glfwInit()){
         std::cerr << "Failed to initialize GLFW\n";
         return false;
     }
@@ -158,7 +168,7 @@ bool Renderer::initGLFW() {
 
     window = glfwCreateWindow(800, 600, "Triangle Renderer", nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
-    if (!window) {
+    if (!window){
         std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
         return false;
@@ -169,7 +179,7 @@ bool Renderer::initGLFW() {
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)){
         std::cerr << "Failed to initialize GLAD\n";
         return false;
     }
@@ -188,7 +198,7 @@ GLuint Renderer::compileShader(GLenum type, const char* source) {
     char infoLog[512];
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 
-    if (!success) {
+    if (!success){
         glGetShaderInfoLog(shader, 512, nullptr, infoLog);
         std::cerr << "Shader compilation failed:\n" << infoLog << "\n";
     }
@@ -196,7 +206,7 @@ GLuint Renderer::compileShader(GLenum type, const char* source) {
     return shader;
 }
 
-void Renderer::setup_shaders() {
+void Renderer::setup_shaders(){
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
     GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
 
@@ -209,7 +219,7 @@ void Renderer::setup_shaders() {
     char infoLog[512];
     glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
 
-    if (!success) {
+    if (!success){
         glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
         std::cerr << "Shader linking failed:\n" << infoLog << "\n";
     }
@@ -218,8 +228,8 @@ void Renderer::setup_shaders() {
     glDeleteShader(fragmentShader);
 }
 
-void Renderer::setup_triangle(std::vector<float> vertices) {
-    if (VAO == 0) {
+void Renderer::setup_triangle(std::vector<float> vertices){
+    if (VAO == 0){
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
     }
@@ -243,7 +253,7 @@ void Renderer::setup_triangle(std::vector<float> vertices) {
 // optional: only if you want to animate vertices
 void Renderer::update_triangle(std::vector<float> vertices) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vertices.size() * sizeof(float), vertices.data());
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_DYNAMIC_DRAW);
 }
 
 void Renderer::set_camera(Camera camera) {
@@ -271,8 +281,10 @@ void Renderer::destroy_camera_ubo() {
     glDeleteBuffers(1, &cameraUBO);
 }
 
-bool Renderer::initialize() {
-    if (!initGLFW()) return false;
+bool Renderer::initialize(){
+    if (!initGLFW()){
+        return false;
+    }
 
     block_texture = new LoadedImage{"assets/textures/dirt.png"};
 
@@ -282,7 +294,7 @@ bool Renderer::initialize() {
     Camera camera = {
         .projection_matrix = glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 5000.0f),
         .view_matrix = glm::mat4(1.0f),
-        .position = glm::vec3(0.0f, 0.0f, 3.0f),
+        .position = glm::vec3(0.0f, 65.0f, 3.0f),
         .yaw = 0.0f,
         .pitch = 0.0f
     };
@@ -303,114 +315,112 @@ bool Renderer::initialize() {
     create_camera_ubo();
     setup_render_data_ssbo();
     std::vector<float> vertices = {
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
 
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
 
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
 
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
 
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
 
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f
     };
-
     setup_triangle(vertices);
-
     return true;
 }
 
 void Renderer::run() {
     while (!glfwWindowShouldClose(window)) {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
             glfwSetWindowShouldClose(window, true);
         }
         Camera camera = active_camera;
         event_available_type event_type;
         while ((event_type = render_queue->is_event_available()) != event_available_type::NONE) {
-            if (event_type == event_available_type::MESH) {
+            if (event_type == event_available_type::MESH){
                 Result<MeshAndId> mesh_and_id_result = render_queue->get_mesh();
                 ErrorType error_type = mesh_and_id_result.check_error();
-                if (error_type != ErrorType::OK) {
+                if (error_type != ErrorType::OK){
                     std::cout << ErrorType_to_string(error_type) << std::endl;
                 }
                 mesh_and_id_result.Handle_Error();
                 MeshAndId mesh_and_id = mesh_and_id_result.GetData();
                 size_t id =  mesh_and_id.render_id;
-                if (object_vertex_data.size() < id) {
+                if (object_vertex_data.size() < id){
                     object_vertex_data.resize(id + 1);
                 }
                 object_vertex_data[id] = mesh_and_id.mesh.mesh;
             }
-            if (event_type == event_available_type::RENDER_DATA) {
+            if (event_type == event_available_type::RENDER_DATA){
                 Result<RenderDataAndId> render_data_and_id_result = render_queue->get_render_data();
                 ErrorType error_type = render_data_and_id_result.check_error();
-                if (error_type != ErrorType::OK) {
+                if (error_type != ErrorType::OK){
                     std::cout << ErrorType_to_string(error_type) << std::endl;
                 }
                 render_data_and_id_result.Handle_Error();
                 RenderDataAndId render_data_and_id = render_data_and_id_result.GetData();
                 size_t id = render_data_and_id.render_id;
-                if (object_vertex_data.size() < id) {
-                    object_vertex_data.resize(id + 1);
+                if (objects_render_data.size() < id){
+                    objects_render_data.resize(id + 1);
                 }
                 ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = render_data_and_id.render_data.model_matrix,};
                 objects_render_data[id] = object_render_data;
             }
         }
-        float moveSpeed = 0.001f;
+        float moveSpeed = 0.01f;
 
         float yawRad = glm::radians(camera.yaw);
         glm::vec3 forward(cos(yawRad), 0.0f, sin(yawRad));
         glm::vec3 right(sin(yawRad), 0.0f, -cos(yawRad));
 
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
             camera.position -= forward * moveSpeed;
         }
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
             camera.position += forward * moveSpeed;
         }
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
             camera.position += right * moveSpeed;
         }
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
             camera.position -= right * moveSpeed;
         }
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS){
             camera.position.y += moveSpeed;
         }
-        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
             camera.position.y -= moveSpeed;
         }
         float pitchRad = glm::radians(camera.pitch);
@@ -441,8 +451,8 @@ void Renderer::run() {
     }
 }
 
-void Renderer::cleanup() {
-    if (block_texture) {
+void Renderer::cleanup(){
+    if (block_texture){
         block_texture->destroy();
         delete block_texture;
         block_texture = nullptr;

@@ -28,6 +28,14 @@ struct MeshAndId {
     size_t render_id;
 };
 
+struct ChunkBlockData {
+    std::array<uint32_t, 4096> block_type;
+};
+
+struct ChunkPosition {
+    glm::vec3 position;
+};
+
 enum class event_available_type {
     NONE = 0,
     MESH = 1,

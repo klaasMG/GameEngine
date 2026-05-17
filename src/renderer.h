@@ -53,4 +53,5 @@ private:
     void setup_render_data_ssbo();
     void update_render_data_ssbo();
     void destroy_render_data_ssbo();
+    bool vertex_check = false;
 };
