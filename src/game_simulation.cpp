@@ -1,8 +1,54 @@
-#include <windows.h>
 #pragma comment(lib, "winmm.lib")
 #include "game_simulation.h"
 #include "renderer.h"
 #include <mutex>
+
+Mesh create_block_mesh(glm::vec3 position, float render_id, int32_t block_id){
+    float block_id_float = static_cast<float>(block_id);
+    std::vector<float> vertices = {
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+
+        0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f
+    };
+};
 
 GameSimulation::GameSimulation(std::shared_ptr<RenderQueue> render_queue_in) {
     render_queue = render_queue_in;
@@ -12,63 +58,64 @@ GameSimulation::GameSimulation(std::shared_ptr<RenderQueue> render_queue_in) {
 
 void GameSimulation::run() {
     std::vector<float> vertices = {
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
 
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
 
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
 
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f
     };
-    ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = glm::mat4(1.0f)};
+    Mesh mesh{.mesh = vertices};
+    RenderData object_render_data = RenderData{.model_matrix = glm::mat4(1.0f)};
+    RenderId render_id = RenderId{.render_id = 0};
     bool is_first_data_send = false;
     using clock = std::chrono::high_resolution_clock;
+    entt::entity block = entt::null;
     while (running) {
         clock::time_point start = clock::now();
         clock::time_point target = start + std::chrono::milliseconds(10);
-        if (!is_first_data_send) {
-            Mesh mesh{.mesh = vertices};
-            RenderId render_id{.render_id = 0};
+        if (block == entt::null) {
+            block = registry.create();
+            registry.emplace<Mesh>(block, mesh);
+            registry.emplace<RenderId>(block, RenderId{0});
+            registry.emplace<RenderData>(block, object_render_data);
             render_queue->send_mesh(mesh, render_id);
-            RenderData render_data{
-                .model_matrix = object_render_data.model_matrix
-            };
-            render_queue->send_render_data(render_data, render_id);
-            is_first_data_send = true;
+            render_queue->send_render_data(object_render_data, render_id);
         }
         while (clock::now() < target) {
             std::this_thread::yield();

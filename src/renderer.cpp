@@ -57,18 +57,18 @@ const char* fragmentShaderSource = R"(
     in float vObjId;
     in float vBlockId;
     out vec4 FragColor;
+    uniform sampler2D uBlockTextureAtlas;
 
     void main() {
-        if (vBlockId == 0.0){
-            FragColor = vec4(0.2, 0.7, 0.3, 1.0);
-        } else {
-            FragColor = vec4(0.2, 0.2, 0.6, 1.0);
-        }
+        float tileX = mod(vBlockId, 16.0);
+        float tileY = floor(vBlockId / 16.0);
+        vec2 atlasUV = vUV + vec2(tileX, tileY) / 16.0;
+        vec4 texColor = texture(uBlockTextureAtlas, atlasUV);
+        FragColor = texColor;
     }
 )";
 
 Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
-    block_texture = load_png_rgba("assets/textures/icon_16x16.png");
     window = nullptr;
     shaderProgram = 0;
     VAO = 0;
@@ -79,7 +79,11 @@ Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
 }
 
 Renderer::~Renderer() {
-    cleanup();
+    if (block_texture) {
+        block_texture->destroy();
+        delete block_texture;
+        block_texture = nullptr;
+    }
 }
 
 void Renderer::setup_render_data_ssbo() {
@@ -171,6 +175,7 @@ bool Renderer::initGLFW() {
     }
 
     glViewport(0, 0, 800, 600);
+    glEnable(GL_DEPTH_TEST);
     return true;
 }
 
@@ -268,6 +273,8 @@ void Renderer::destroy_camera_ubo() {
 
 bool Renderer::initialize() {
     if (!initGLFW()) return false;
+
+    block_texture = new LoadedImage{"assets/textures/dirt.png"};
 
     int width, height;
     glfwGetWindowSize(window, &width, &height);
@@ -420,9 +427,12 @@ void Renderer::run() {
         update_render_data_ssbo();
 
         glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, block_texture->texture);
+        glUniform1i(glGetUniformLocation(shaderProgram, "uBlockTextureAtlas"), 0);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, vertices_in.size() / 7);
 
@@ -432,6 +442,11 @@ void Renderer::run() {
 }
 
 void Renderer::cleanup() {
+    if (block_texture) {
+        block_texture->destroy();
+        delete block_texture;
+        block_texture = nullptr;
+    }
     destroy_render_data_ssbo();
     destroy_camera_ubo();
     glDeleteVertexArrays(1, &VAO);

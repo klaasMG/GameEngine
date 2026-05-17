@@ -27,7 +27,7 @@ public:
     void cleanup();
     void set_camera(Camera camera);
 private:
-    LoadedImage block_texture;
+    LoadedImage* block_texture = nullptr;
     std::shared_ptr<RenderQueue> render_queue;
     GLFWwindow* window;
     GLuint shaderProgram;
