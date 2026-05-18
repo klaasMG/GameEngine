@@ -36,6 +36,10 @@ struct ChunkPosition {
     glm::vec3 position;
 };
 
+struct ChunkId {
+    size_t chunk_id;
+};
+
 enum class event_available_type {
     NONE = 0,
     MESH = 1,
@@ -63,6 +67,7 @@ public:
     void run();
     void stop();
 private:
+    std::vector<entt::entity> chunks = {};
     entt::registry registry;
     std::shared_ptr<RenderQueue> render_queue;
     bool running;

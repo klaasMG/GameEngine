@@ -111,7 +111,7 @@ void Renderer::setup_render_data_ssbo() {
 
 void Renderer::update_render_data_ssbo() {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(ObjectRenderData) * objects_render_data.size(), objects_render_data.data());
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * objects_render_data.size(), objects_render_data.data(), GL_DYNAMIC_DRAW);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
@@ -121,8 +121,17 @@ void Renderer::destroy_render_data_ssbo() {
 }
 
 void Renderer::framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
-}
+         glViewport(0, 0, width, height);
+         Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
+         if (renderer && width > 0 && height > 0) {
+             renderer->active_camera.projection_matrix = glm::perspective(
+                 glm::radians(60.0f),
+                 (float)width / (float)height,
+                 0.1f,
+                 5000.0f
+             );
+         }
+     }
 
 void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
@@ -378,7 +387,7 @@ void Renderer::run() {
                 mesh_and_id_result.Handle_Error();
                 MeshAndId mesh_and_id = mesh_and_id_result.GetData();
                 size_t id =  mesh_and_id.render_id;
-                if (object_vertex_data.size() < id){
+                if (object_vertex_data.size() - 1< id){
                     object_vertex_data.resize(id + 1);
                 }
                 object_vertex_data[id] = mesh_and_id.mesh.mesh;
@@ -392,7 +401,7 @@ void Renderer::run() {
                 render_data_and_id_result.Handle_Error();
                 RenderDataAndId render_data_and_id = render_data_and_id_result.GetData();
                 size_t id = render_data_and_id.render_id;
-                if (objects_render_data.size() < id){
+                if (objects_render_data.size() - 1 < id){
                     objects_render_data.resize(id + 1);
                 }
                 ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = render_data_and_id.render_data.model_matrix,};

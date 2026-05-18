@@ -1,12 +1,22 @@
 #pragma comment(lib, "winmm.lib")
 #include "game_simulation.h"
-
 #include <fstream>
-
 #include "renderer.h"
 #include <mutex>
 #include "vendor/glm/ext/matrix_transform.hpp"
+#include <vendor/glm/glm.hpp>
+#include <iostream>
+#include <ranges>
 #define CHUNK_SIZE 16
+
+void printMat4(const glm::mat4& m) {
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 4; col++) {
+            std::cout << m[col][row] << " ";
+        }
+        std::cout << "\n";
+    }
+}
 
 Mesh create_block_mesh(glm::vec3 position, float object_id, int32_t block_id){
     float block_id_float = static_cast<float>(block_id);
@@ -74,7 +84,7 @@ glm::mat4x4 create_model_matrix(const glm::vec3& position) {
 }
 
 glm::mat4x4 create_model_matrix_chunk(const glm::vec3& position) {
-    glm::vec3 chunk_position = glm::vec3(position.x * CHUNK_SIZE + (CHUNK_SIZE / 2.0), position.y * CHUNK_SIZE + (CHUNK_SIZE / 2.0), position.z * CHUNK_SIZE + (CHUNK_SIZE / 2.0));
+    glm::vec3 chunk_position = glm::vec3(position.x * CHUNK_SIZE, position.y * CHUNK_SIZE, position.z * CHUNK_SIZE);
     glm::mat4x4 model = create_model_matrix(chunk_position);
     return model;
 };
@@ -180,6 +190,12 @@ void GameSimulation::run() {
         clock::time_point target = start + std::chrono::milliseconds(10);
         if (chunck == entt::null) {
             chunck = registry.create();
+            chunks.push_back(chunck);
+            ChunkId chunk_id = ChunkId{chunks.size() - 1};
+            registry.emplace<ChunkId>(chunck, chunk_id);
+            if (chunk_id.chunk_id > chunks.size() - 1) {
+                chunks.resize(chunk_id.chunk_id + 1);
+            }
             glm::vec3 chunk_position = glm::vec3{0.0f, 1.0f, 0.0f};
             registry.emplace<ChunkPosition>(chunck, ChunkPosition{.position = chunk_position});
             std::array<uint32_t, 4096> arr;
@@ -188,23 +204,40 @@ void GameSimulation::run() {
             chunk_block_data.block_type = arr;
             registry.emplace<ChunkBlockData>(chunck, chunk_block_data);
             glm::mat4x4 model_matrix = create_model_matrix_chunk(chunk_position);
+            std::cout << "model matrix 1: " << std::endl;
+            printMat4(model_matrix);
             registry.emplace<RenderData>(chunck, RenderData{.model_matrix = model_matrix});
             registry.emplace<RenderId>(chunck, render_id);
             Mesh chunk_mesh = Mesh{.mesh = generate_chunk_mesh(chunk_block_data, render_id.render_id)};
             registry.emplace<Mesh>(chunck, chunk_mesh);
-
-            std::ofstream out("dump.txt");
-            out << chunk_mesh.mesh.size() << " chunks\n";
-            for (size_t i = 0; i < chunk_mesh.mesh.size(); i += 7) {
-                for (int j = 0; j < 7; j++) {
-                    out << (i + j) << " : " << chunk_mesh.mesh[i + j];
-                    if (j != 6) out << ", ";
-                }
-                out << "\n";
-            }
-
             render_queue->send_mesh(chunk_mesh, render_id);
             render_queue->send_render_data(RenderData{.model_matrix = model_matrix}, render_id);
+
+            entt::entity chunck2 = registry.create();
+            chunks.push_back(chunck2);
+            ChunkId chunk_id2 = ChunkId{chunks.size() - 1};
+            registry.emplace<ChunkId>(chunck2, chunk_id2);
+            if (chunk_id2.chunk_id > chunks.size() - 1) {
+                chunks.resize(chunk_id2.chunk_id + 1);
+            }
+            glm::vec3 chunk_position2 = glm::vec3{0.0f, 2.0f, 0.0f};
+            registry.emplace<ChunkPosition>(chunck2, ChunkPosition{.position = chunk_position2});
+            std::array<uint32_t, 4096> arr2;
+            arr2.fill(1);
+            ChunkBlockData chunk_block_data2 = ChunkBlockData{};
+            chunk_block_data2.block_type = arr2;
+            registry.emplace<ChunkBlockData>(chunck2, chunk_block_data2);
+            glm::mat4x4 model_matrix2 = create_model_matrix_chunk(chunk_position2);
+            std::cout << "model matrix 2: " << std::endl;
+            printMat4(model_matrix2);
+            registry.emplace<RenderData>(chunck2, RenderData{.model_matrix = model_matrix2});
+            RenderId render_id2 = RenderId{.render_id = 1};
+            registry.emplace<RenderId>(chunck2, render_id2);
+            Mesh chunk_mesh2 = Mesh{.mesh = generate_chunk_mesh(chunk_block_data2, render_id2.render_id)};
+            registry.emplace<Mesh>(chunck2, chunk_mesh2);
+            render_queue->send_mesh(chunk_mesh2, render_id2);
+            render_queue->send_render_data(RenderData{.model_matrix = model_matrix2}, render_id2);
+
         }
         while (clock::now() < target) {
             std::this_thread::yield();
