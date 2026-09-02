@@ -5,14 +5,7 @@
 #include "vendor/glm/glm.hpp"
 #include "game_simulation.h"
 #include "texture_loader.h"
-
-struct Camera {
-    glm::mat4x4 projection_matrix;
-    glm::mat4x4 view_matrix;
-    glm::vec3 position = glm::vec3(0.0f, 0.0f, -3.0f);
-    float yaw = 0.0f;
-    float pitch = 0.0f;
-};
+#include "Camera.h"
 
 struct ObjectRenderData {
     glm::mat4x4 model_matrix;
@@ -35,9 +28,6 @@ private:
     GLuint cameraUBO;
     GLuint SSBO;
     Camera active_camera;
-    double lastMouseX = 400.0;
-    double lastMouseY = 300.0;
-    float sensitivity = 0.1f;
     std::vector<ObjectRenderData> objects_render_data = {ObjectRenderData{.model_matrix = glm::mat4(1.0f)}};
     std::vector<std::vector<float>> object_vertex_data = {{}};
     static void framebuffer_size_callback(GLFWwindow* window, int width, int height);

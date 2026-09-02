@@ -1,6 +1,6 @@
+#include <thread>
 #include "Renderer.h"
 #include "game_simulation.h"
-#include <thread>
 #include "texture_loader.h"
 
 int main() {

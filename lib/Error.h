@@ -11,6 +11,7 @@ enum class ErrorType {
     FILE_IN_USE,
     FILE_DATA_ERROR,
     QUEUE_EMPTY,
+    SAVE_DATA_TYPE_DUPLICATE,
 };
 
 inline std::string ErrorType_to_string(ErrorType type) {
@@ -21,6 +22,7 @@ inline std::string ErrorType_to_string(ErrorType type) {
         case ErrorType::FILE_IN_USE: return "File in use";
         case ErrorType::FILE_DATA_ERROR: return "File data error";
         case ErrorType::QUEUE_EMPTY: return "Queue is empty";
+        case ErrorType::SAVE_DATA_TYPE_DUPLICATE: return "Save data duplicate";
     }
 
     std::cerr << "Unhandled ErrorType\n";

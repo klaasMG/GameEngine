@@ -5,6 +5,7 @@
 #include "vendor/glm/glm.hpp"
 #include "vendor/glm/gtc/matrix_transform.hpp"
 #include <iostream>
+#include <regex>
 #include <vector>
 
 std::vector<float> flatten_vector(const std::vector<std::vector<float>>& input) {
@@ -81,7 +82,7 @@ Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
     VBO = 0;
     cameraUBO = 0;
     SSBO = 0;
-    render_queue = render_queue_in;
+    render_queue = render_queue_in; // NOLINT(*-unnecessary-value-param)
 }
 
 Renderer::~Renderer(){
@@ -135,34 +136,7 @@ void Renderer::framebuffer_size_callback(GLFWwindow* window, int width, int heig
 
 void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-    double deltaX = xpos - renderer->lastMouseX;
-    double deltaY = ypos - renderer->lastMouseY;
-    renderer->lastMouseX = xpos;
-    renderer->lastMouseY = ypos;
-
-    Camera camera = renderer->active_camera;
-
-    camera.yaw += deltaX * renderer->sensitivity;
-    camera.pitch -= deltaY * renderer->sensitivity;
-
-    if (camera.pitch > 89.0f){
-        camera.pitch = 89.0f;
-    }
-    if (camera.pitch < -89.0f){
-        camera.pitch = -89.0f;
-    }
-
-    float yawRad = glm::radians(camera.yaw);
-    float pitchRad = glm::radians(camera.pitch);
-
-    glm::vec3 front;
-    front.x = cos(yawRad) * cos(pitchRad);
-    front.y = sin(pitchRad);
-    front.z = sin(yawRad) * cos(pitchRad);
-
-    glm::vec3 cameraTarget = camera.position + glm::normalize(front);
-    camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-    renderer->set_camera(camera);
+    renderer->render_queue->send_input("mouse_movement",xpos, ypos);
 }
 
 bool Renderer::initGLFW(){
@@ -303,12 +277,10 @@ bool Renderer::initialize(){
     Camera camera = {
         .projection_matrix = glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 5000.0f),
         .view_matrix = glm::mat4(1.0f),
-        .position = glm::vec3(0.0f, 65.0f, 3.0f),
+        .position = glm::vec3(0.0f, 45.0f, 3.0f),
         .yaw = 0.0f,
         .pitch = 0.0f
     };
-    lastMouseX = width / 2.0;
-    lastMouseY = height / 2.0;
     set_camera(camera);
 
     float yawRad = glm::radians(camera.yaw);
@@ -375,7 +347,6 @@ void Renderer::run() {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
             glfwSetWindowShouldClose(window, true);
         }
-        Camera camera = active_camera;
         event_available_type event_type;
         while ((event_type = render_queue->is_event_available()) != event_available_type::NONE) {
             if (event_type == event_available_type::MESH){
@@ -407,39 +378,69 @@ void Renderer::run() {
                 ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = render_data_and_id.render_data.model_matrix,};
                 objects_render_data[id] = object_render_data;
             }
+            if (event_type == event_available_type::CAMERA) {
+                Result<Camera> camera_result = render_queue->get_camera_data();
+                ErrorType error_type = camera_result.check_error();
+                if (error_type != ErrorType::OK) {
+                    std::cout << ErrorType_to_string(error_type) << std::endl;
+                }
+                camera_result.Handle_Error();
+                Camera camera = camera_result.GetData();
+
+                // Inline camera print
+                std::cout << "Camera: pos=("
+                          << camera.position.x << ", "
+                          << camera.position.y << ", "
+                          << camera.position.z << ") "
+                          << "yaw=" << camera.yaw
+                          << " pitch=" << camera.pitch << "\n";
+                for (int row = 0; row < 4; ++row) {
+                    for (int col = 0; col < 4; ++col)
+                        std::cout << camera.projection_matrix[col][row] << ' ';
+                    std::cout << '\n';
+                }
+                for (int row = 0; row < 4; ++row) {
+                    for (int col = 0; col < 4; ++col)
+                        std::cout << camera.view_matrix[col][row] << ' ';
+                    std::cout << '\n';
+                }
+                set_camera(camera);
+                std::cout << "Active Camera: pos=("
+                          << active_camera.position.x << ", "
+                          << active_camera.position.y << ", "
+                          << active_camera.position.z << ") "
+                          << "yaw=" << active_camera.yaw
+                          << " pitch=" << active_camera.pitch << "\n";
+                for (int row = 0; row < 4; ++row) {
+                    for (int col = 0; col < 4; ++col)
+                        std::cout << active_camera.projection_matrix[col][row] << ' ';
+                    std::cout << '\n';
+                }
+                for (int row = 0; row < 4; ++row) {
+                    for (int col = 0; col < 4; ++col)
+                        std::cout << active_camera.view_matrix[col][row] << ' ';
+                    std::cout << '\n';
+                }
+            }
         }
-        float moveSpeed = 0.01f;
-
-        float yawRad = glm::radians(camera.yaw);
-        glm::vec3 forward(cos(yawRad), 0.0f, sin(yawRad));
-        glm::vec3 right(sin(yawRad), 0.0f, -cos(yawRad));
-
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
-            camera.position -= forward * moveSpeed;
+            render_queue->send_input("s");
         }
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
-            camera.position += forward * moveSpeed;
+            render_queue->send_input("w");
         }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
-            camera.position += right * moveSpeed;
+            render_queue->send_input("a");
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
-            camera.position -= right * moveSpeed;
+            render_queue->send_input("d");
         }
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS){
-            camera.position.y += moveSpeed;
+            render_queue->send_input("space");
         }
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
-            camera.position.y -= moveSpeed;
+            render_queue->send_input("shift");
         }
-        float pitchRad = glm::radians(camera.pitch);
-        glm::vec3 front;
-        front.x = cos(yawRad) * cos(pitchRad);
-        front.y = sin(pitchRad);
-        front.z = sin(yawRad) * cos(pitchRad);
-        glm::vec3 cameraTarget = camera.position + glm::normalize(front);
-        camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-        set_camera(camera);
         std::vector<float> vertices_in = flatten_vector(object_vertex_data);
         update_triangle(vertices_in);
         update_camera_ubo();

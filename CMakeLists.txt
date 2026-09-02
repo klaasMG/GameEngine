@@ -25,7 +25,9 @@ add_executable(GameEngine src/main.cpp
         lib/Error.h
         vendor/stb_image/stb_image.h
         src/texture_loader.h
-        src/texture_loader.cpp)
+        src/texture_loader.cpp
+        lib/macros.h
+        src/Camera.h)
 
 target_include_directories(GameEngine PRIVATE
     ${CMAKE_SOURCE_DIR}
@@ -35,4 +37,4 @@ add_glfw()
 add_EnTT()
 target_link_libraries(GameEngine PRIVATE winmm)
 message(STATUS "build the project")
-message(STATUS "dj")
+message(STATUS "this")
