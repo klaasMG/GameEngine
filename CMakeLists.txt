@@ -27,7 +27,8 @@ add_executable(GameEngine src/main.cpp
         src/texture_loader.h
         src/texture_loader.cpp
         lib/macros.h
-        src/Camera.h)
+        src/Camera.h
+        src/structs.h)
 
 target_include_directories(GameEngine PRIVATE
     ${CMAKE_SOURCE_DIR}

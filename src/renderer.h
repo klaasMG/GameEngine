@@ -3,33 +3,25 @@
 #include "vendor/glad/include/glad/glad.h"
 #include "vendor/glfw/include/GLFW/glfw3.h"
 #include "vendor/glm/glm.hpp"
-#include "game_simulation.h"
 #include "texture_loader.h"
 #include "Camera.h"
-
-struct ObjectRenderData {
-    glm::mat4x4 model_matrix;
-};
+#include "structs.h"
 
 class Renderer {
 public:
-    Renderer(std::shared_ptr<RenderQueue> render_queue_in);
+    Renderer(std::shared_ptr<input_queue> input_queue_ptr);
     ~Renderer();
     bool initialize();
     void run();
     void cleanup();
     void set_camera(Camera camera);
-private:
     LoadedImage* block_texture = nullptr;
-    std::shared_ptr<RenderQueue> render_queue;
     GLFWwindow* window;
     GLuint shaderProgram;
     GLuint VAO, VBO;
     GLuint cameraUBO;
     GLuint SSBO;
-    Camera active_camera;
-    std::vector<ObjectRenderData> objects_render_data = {ObjectRenderData{.model_matrix = glm::mat4(1.0f)}};
-    std::vector<std::vector<float>> object_vertex_data = {{}};
+    GameData game_data;
     static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
     static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
     bool initGLFW();
@@ -44,4 +36,6 @@ private:
     void update_render_data_ssbo();
     void destroy_render_data_ssbo();
     bool vertex_check = false;
+    std::shared_ptr<input_queue> input_queue_ptr;
+    std::timed_mutex lock;
 };

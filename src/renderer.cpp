@@ -8,6 +8,8 @@
 #include <regex>
 #include <vector>
 
+#include "lib/Error.h"
+
 std::vector<float> flatten_vector(const std::vector<std::vector<float>>& input) {
     std::vector<float> output;
 
@@ -75,14 +77,14 @@ const char* fragmentShaderSource = R"(
     }
 )";
 
-Renderer::Renderer(std::shared_ptr<RenderQueue> render_queue_in) {
+Renderer::Renderer(std::shared_ptr<input_queue> input_queue_ptr) {
+    this->input_queue_ptr = std::move(input_queue_ptr);
     window = nullptr;
     shaderProgram = 0;
     VAO = 0;
     VBO = 0;
     cameraUBO = 0;
     SSBO = 0;
-    render_queue = render_queue_in; // NOLINT(*-unnecessary-value-param)
 }
 
 Renderer::~Renderer(){
@@ -97,23 +99,26 @@ void Renderer::setup_render_data_ssbo() {
     glGenBuffers(1, &SSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
 
+    lock.lock();
     // Allocate storage (example: 100 structs)
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * objects_render_data.size(), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * game_data.model_matrices.size(), nullptr, GL_DYNAMIC_DRAW);
 
     // Bind to binding point 0
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
 
     // Optional: upload initial data
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(ObjectRenderData) * objects_render_data.size(), objects_render_data.data());
-
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(ObjectRenderData) * game_data.model_matrices.size(), game_data.model_matrices.data());
+    lock.unlock();
     // Cleanup bind
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
 void Renderer::update_render_data_ssbo() {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * objects_render_data.size(), objects_render_data.data(), GL_DYNAMIC_DRAW);
+    lock.lock();
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ObjectRenderData) * game_data.model_matrices.size(), game_data.model_matrices.data(), GL_DYNAMIC_DRAW);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    lock.unlock();
 }
 
 void Renderer::destroy_render_data_ssbo() {
@@ -125,18 +130,21 @@ void Renderer::framebuffer_size_callback(GLFWwindow* window, int width, int heig
          glViewport(0, 0, width, height);
          Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
          if (renderer && width > 0 && height > 0) {
-             renderer->active_camera.projection_matrix = glm::perspective(
+             renderer->lock.lock();
+             renderer->game_data.camera.projection_matrix = glm::perspective(
                  glm::radians(60.0f),
                  (float)width / (float)height,
                  0.1f,
                  5000.0f
              );
+             renderer->lock.unlock();
          }
      }
 
 void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-    renderer->render_queue->send_input("mouse_movement",xpos, ypos);
+    MouseInputData mouse_input_data = MouseInputData{.posX = xpos, .posY = ypos};
+    renderer->input_queue_ptr->send_mouse(mouse_input_data);
 }
 
 bool Renderer::initGLFW(){
@@ -240,7 +248,9 @@ void Renderer::update_triangle(std::vector<float> vertices) {
 }
 
 void Renderer::set_camera(Camera camera) {
-    active_camera = camera;
+    lock.lock();
+    game_data.camera = camera;
+    lock.unlock();
 }
 
 void Renderer::create_camera_ubo() {
@@ -256,7 +266,9 @@ void Renderer::create_camera_ubo() {
 
 void Renderer::update_camera_ubo() {
     glBindBuffer(GL_UNIFORM_BUFFER, cameraUBO);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Camera), &active_camera);
+    lock.lock();
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Camera), &game_data.camera);
+    lock.unlock();
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
@@ -347,101 +359,25 @@ void Renderer::run() {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
             glfwSetWindowShouldClose(window, true);
         }
-        event_available_type event_type;
-        while ((event_type = render_queue->is_event_available()) != event_available_type::NONE) {
-            if (event_type == event_available_type::MESH){
-                Result<MeshAndId> mesh_and_id_result = render_queue->get_mesh();
-                ErrorType error_type = mesh_and_id_result.check_error();
-                if (error_type != ErrorType::OK){
-                    std::cout << ErrorType_to_string(error_type) << std::endl;
-                }
-                mesh_and_id_result.Handle_Error();
-                MeshAndId mesh_and_id = mesh_and_id_result.GetData();
-                size_t id =  mesh_and_id.render_id;
-                if (object_vertex_data.size() - 1< id){
-                    object_vertex_data.resize(id + 1);
-                }
-                object_vertex_data[id] = mesh_and_id.mesh.mesh;
-            }
-            if (event_type == event_available_type::RENDER_DATA){
-                Result<RenderDataAndId> render_data_and_id_result = render_queue->get_render_data();
-                ErrorType error_type = render_data_and_id_result.check_error();
-                if (error_type != ErrorType::OK){
-                    std::cout << ErrorType_to_string(error_type) << std::endl;
-                }
-                render_data_and_id_result.Handle_Error();
-                RenderDataAndId render_data_and_id = render_data_and_id_result.GetData();
-                size_t id = render_data_and_id.render_id;
-                if (objects_render_data.size() - 1 < id){
-                    objects_render_data.resize(id + 1);
-                }
-                ObjectRenderData object_render_data = ObjectRenderData{.model_matrix = render_data_and_id.render_data.model_matrix,};
-                objects_render_data[id] = object_render_data;
-            }
-            if (event_type == event_available_type::CAMERA) {
-                Result<Camera> camera_result = render_queue->get_camera_data();
-                ErrorType error_type = camera_result.check_error();
-                if (error_type != ErrorType::OK) {
-                    std::cout << ErrorType_to_string(error_type) << std::endl;
-                }
-                camera_result.Handle_Error();
-                Camera camera = camera_result.GetData();
-
-                // Inline camera print
-                std::cout << "Camera: pos=("
-                          << camera.position.x << ", "
-                          << camera.position.y << ", "
-                          << camera.position.z << ") "
-                          << "yaw=" << camera.yaw
-                          << " pitch=" << camera.pitch << "\n";
-                for (int row = 0; row < 4; ++row) {
-                    for (int col = 0; col < 4; ++col)
-                        std::cout << camera.projection_matrix[col][row] << ' ';
-                    std::cout << '\n';
-                }
-                for (int row = 0; row < 4; ++row) {
-                    for (int col = 0; col < 4; ++col)
-                        std::cout << camera.view_matrix[col][row] << ' ';
-                    std::cout << '\n';
-                }
-                set_camera(camera);
-                std::cout << "Active Camera: pos=("
-                          << active_camera.position.x << ", "
-                          << active_camera.position.y << ", "
-                          << active_camera.position.z << ") "
-                          << "yaw=" << active_camera.yaw
-                          << " pitch=" << active_camera.pitch << "\n";
-                for (int row = 0; row < 4; ++row) {
-                    for (int col = 0; col < 4; ++col)
-                        std::cout << active_camera.projection_matrix[col][row] << ' ';
-                    std::cout << '\n';
-                }
-                for (int row = 0; row < 4; ++row) {
-                    for (int col = 0; col < 4; ++col)
-                        std::cout << active_camera.view_matrix[col][row] << ' ';
-                    std::cout << '\n';
-                }
-            }
-        }
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
-            render_queue->send_input("s");
+            input_queue_ptr->send_key(KeyInputData{.key = "s"});
         }
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
-            render_queue->send_input("w");
+            input_queue_ptr->send_key(KeyInputData{.key = "w"});
         }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
-            render_queue->send_input("a");
+            input_queue_ptr->send_key(KeyInputData{.key = "a"});
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
-            render_queue->send_input("d");
+            input_queue_ptr->send_key(KeyInputData{.key = "d"});
         }
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS){
-            render_queue->send_input("space");
+            input_queue_ptr->send_key(KeyInputData{.key = "space"});
         }
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
-            render_queue->send_input("shift");
+            input_queue_ptr->send_key(KeyInputData{.key = "shift"});
         }
-        std::vector<float> vertices_in = flatten_vector(object_vertex_data);
+        std::vector<float> vertices_in = flatten_vector(game_data.object_vertex_data);
         update_triangle(vertices_in);
         update_camera_ubo();
         update_render_data_ssbo();

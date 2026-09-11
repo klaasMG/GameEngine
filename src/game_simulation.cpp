@@ -1,22 +1,15 @@
 #pragma comment(lib, "winmm.lib")
 #include "game_simulation.h"
 #include <fstream>
-#include "renderer.h"
+#include "structs.h"
 #include <mutex>
+#include <thread>
 #include "vendor/glm/ext/matrix_transform.hpp"
 #include <vendor/glm/glm.hpp>
 #include <iostream>
 #include <ranges>
+#include "cmath"
 #define CHUNK_SIZE 16
-
-void printMat4(const glm::mat4& m) {
-    for (int row = 0; row < 4; row++) {
-        for (int col = 0; col < 4; col++) {
-            std::cout << m[col][row] << " ";
-        }
-        std::cout << "\n";
-    }
-}
 
 Mesh create_block_mesh(glm::vec3 position, float object_id, int32_t block_id){
     float block_id_float = static_cast<float>(block_id);
@@ -89,8 +82,9 @@ glm::mat4x4 create_model_matrix_chunk(const glm::vec3& position) {
     return model;
 };
 
-GameSimulation::GameSimulation(std::shared_ptr<RenderQueue> render_queue_in) {
-    render_queue = render_queue_in;
+GameSimulation::GameSimulation(std::shared_ptr<Renderer> render, std::shared_ptr<input_queue> input_queue_ptr) {
+    this->input_queue_ptr = std::move(input_queue_ptr);
+    render_for_swap = std::move(render);
     registry = entt::registry();
     running = true;
 }
@@ -134,62 +128,33 @@ std::vector<float> generate_chunk_mesh(const ChunkBlockData& block_data_chunk, c
         }
     }
     return chunk_mesh;
-};
-
-void GameSimulation::set_camera(const Camera& camera) {
-    active_camera = camera;
 }
 
-std::vector<ChunkData> GameSimulation::generate_chunk(const size_t& pos_x, const size_t& pos_y) {
-    entt::entity chunck = registry.create();
-    RenderId render_id = RenderId{.render_id = 0};
-    chunks.push_back(chunck);
-    ChunkId chunk_id = ChunkId{chunks.size() - 1};
-    registry.emplace<ChunkId>(chunck, chunk_id);
-    if (chunk_id.chunk_id > chunks.size() - 1) {
-        chunks.resize(chunk_id.chunk_id + 1);
-    }
-    glm::vec3 chunk_position = glm::vec3{0.0f, 1.0f, 0.0f};
-    registry.emplace<ChunkPosition>(chunck, ChunkPosition{.position = chunk_position});
+void GameSimulation::set_camera(const Camera& camera) {
+    game_data.camera = camera;
+}
+
+std::vector<ChunkData> GameSimulation::generate_chunk(const int64_t& pos_x, const int64_t& pos_z) {
+    std::vector<ChunkData> chunks_data = {};
+    entt::entity chunk = registry.create();
+    ChunkId chunk_id = static_cast<ChunkId>(this->chunk_id);
+    this->chunk_id++;
     std::array<uint32_t, 4096> arr;
     arr.fill(1);
-    ChunkBlockData chunk_block_data = ChunkBlockData{};
-    chunk_block_data.block_type = arr;
-    registry.emplace<ChunkBlockData>(chunck, chunk_block_data);
-    glm::mat4x4 model_matrix = create_model_matrix_chunk(chunk_position);
-    std::cout << "model matrix 1: " << std::endl;
-    printMat4(model_matrix);
-    registry.emplace<RenderData>(chunck, RenderData{.model_matrix = model_matrix});
-    registry.emplace<RenderId>(chunck, render_id);
-    Mesh chunk_mesh = Mesh{.mesh = generate_chunk_mesh(chunk_block_data, render_id.render_id)};
-    registry.emplace<Mesh>(chunck, chunk_mesh);
-    render_queue->send_mesh(chunk_mesh, render_id);
-    render_queue->send_render_data(RenderData{.model_matrix = model_matrix}, render_id);
-
-    entt::entity chunck2 = registry.create();
-    chunks.push_back(chunck2);
-    ChunkId chunk_id2 = ChunkId{chunks.size() - 1};
-    registry.emplace<ChunkId>(chunck2, chunk_id2);
-    if (chunk_id2.chunk_id > chunks.size() - 1) {
-        chunks.resize(chunk_id2.chunk_id + 1);
-    }
-    glm::vec3 chunk_position2 = glm::vec3{0.0f, 2.0f, 0.0f};
-    registry.emplace<ChunkPosition>(chunck2, ChunkPosition{.position = chunk_position2});
-    std::array<uint32_t, 4096> arr2;
-    arr2.fill(1);
-    ChunkBlockData chunk_block_data2 = ChunkBlockData{};
-    chunk_block_data2.block_type = arr2;
-    registry.emplace<ChunkBlockData>(chunck2, chunk_block_data2);
-    glm::mat4x4 model_matrix2 = create_model_matrix_chunk(chunk_position2);
-    std::cout << "model matrix 2: " << std::endl;
-    printMat4(model_matrix2);
-    registry.emplace<RenderData>(chunck2, RenderData{.model_matrix = model_matrix2});
-    RenderId render_id2 = RenderId{.render_id = 1};
-    registry.emplace<RenderId>(chunck2, render_id2);
-    Mesh chunk_mesh2 = Mesh{.mesh = generate_chunk_mesh(chunk_block_data2, render_id2.render_id)};
-    registry.emplace<Mesh>(chunck2, chunk_mesh2);
-    render_queue->send_mesh(chunk_mesh2, render_id2);
-    render_queue->send_render_data(RenderData{.model_matrix = model_matrix2}, render_id2);
+    ChunkBlockData block_data = ChunkBlockData{.block_type = arr};
+    ChunkPosition position = ChunkPosition{.position = {pos_x, pos_z, 0}};
+    ChunkData chunk_data = ChunkData{.chunk_id = chunk_id, .chunk_block_data = block_data, .chunk_position = position, .entity = chunk};
+    chunks_data.push_back(chunk_data);
+    entt::entity chunk1 = registry.create();
+    ChunkId chunk_id1 = static_cast<ChunkId>(this->chunk_id);
+    this->chunk_id++;
+    std::array<uint32_t, 4096> arr1;
+    arr1.fill(1);
+    ChunkBlockData block_data1 = ChunkBlockData{.block_type = arr1};
+    ChunkPosition position1 = ChunkPosition{.position = {pos_x, pos_z, 1}};
+    ChunkData chunk_data1 = ChunkData{.chunk_id = chunk_id1, .chunk_block_data = block_data1, .chunk_position = position1, .entity = chunk1};
+    chunks_data.push_back(chunk_data1);
+    return chunks_data;
 }
 
 void GameSimulation::run() {
@@ -236,149 +201,159 @@ void GameSimulation::run() {
         -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f,
         -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f
     };
-    Mesh mesh = create_block_mesh(glm::vec3{-0.0f, -0.0f, -0.0f},0.0,0.0);
-    RenderData object_render_data = RenderData{.model_matrix = glm::mat4(1.0f)};
-    RenderId render_id = RenderId{.render_id = 0};
     using clock = std::chrono::high_resolution_clock;
-    entt::entity chunck = entt::null;
     while (running) {
         clock::time_point start = clock::now();
         clock::time_point target = start + std::chrono::milliseconds(10);
-        event_available_type event_type;
-        bool is_camera_updated = false;
-        while ((event_type = render_queue->is_event_available()) != event_available_type::NONE) {
-            if (event_type == event_available_type::INPUT) {
-                Result<InputData> input_event = render_queue->get_input_data();
-                if (input_event.check_error() != ErrorType::OK) {
-                    std::cout << ErrorType_to_string(input_event.check_error()) << std::endl;
+        while (!input_queue_ptr->empty()) {
+            float yawRad = glm::radians(game_data.camera.yaw);
+            glm::vec3 forward(cos(yawRad), 0.0f, sin(yawRad));
+            glm::vec3 right(sin(yawRad), 0.0f, -cos(yawRad));
+            InputData input_data = input_queue_ptr->receive_input_data();
+            if (input_data.key_maybe.has_value()) {
+                KeyInputData key_data = input_data.key_maybe.value();
+                if (key_data.key == "d") {
+                    game_data.camera.position -= right * moveSpeed;
                 }
-                input_event.Handle_Error();
-                InputData input_data = input_event.GetData();
-                float yawRad = glm::radians(active_camera.yaw);
-                glm::vec3 forward(cos(yawRad), 0.0f, sin(yawRad));
-                glm::vec3 right(sin(yawRad), 0.0f, -cos(yawRad));
-                if (input_data.input == "d") {
-                    active_camera.position -= right * moveSpeed;
+                if (key_data.key == "s") {
+                    game_data.camera.position -= forward * moveSpeed;
                 }
-                if (input_data.input == "s") {
-                    active_camera.position -= forward * moveSpeed;
+                if (key_data.key == "w") {
+                    game_data.camera.position += forward * moveSpeed;
                 }
-                if (input_data.input == "w") {
-                    active_camera.position += forward * moveSpeed;
+                if (key_data.key == "a") {
+                    game_data.camera.position += right * moveSpeed;
                 }
-                if (input_data.input == "a") {
-                    active_camera.position += right * moveSpeed;
+                if (key_data.key == "space") {
+                    game_data.camera.position.y += moveSpeed;
                 }
-                if (input_data.input == "space") {
-                    active_camera.position.y += moveSpeed;
+                if (key_data.key == "shift") {
+                    game_data.camera.position.y -= moveSpeed;
                 }
-                if (input_data.input == "shift") {
-                    active_camera.position.y -= moveSpeed;
-                }
-                if (input_data.input == "mouse_movement") {
-                    double xpos = input_data.deltaX;
-                    double ypos = input_data.deltaY;
-                    double deltaX = xpos - lastMouseX;
-                    double deltaY = ypos - lastMouseY;
-                    lastMouseX = xpos;
-                    lastMouseY = ypos;
+            }
+            else if (input_data.mouse_maybe.has_value()) {
+                MouseInputData mouse_input_data = input_data.mouse_maybe.value();
+                double xpos = mouse_input_data.posX;
+                double ypos = mouse_input_data.posY;
+                double deltaX = xpos - lastMouseX;
+                double deltaY = ypos - lastMouseY;
+                lastMouseX = xpos;
+                lastMouseY = ypos;
 
-                    Camera camera = active_camera;
+                Camera camera = game_data.camera;
 
-                    camera.yaw += deltaX * sensitivity;
-                    camera.pitch -= deltaY * sensitivity;
+                camera.yaw += deltaX * sensitivity;
+                camera.pitch -= deltaY * sensitivity;
 
-                    if (camera.pitch > 89.0f){
-                        camera.pitch = 89.0f;
-                    }
-                    if (camera.pitch < -89.0f){
-                        camera.pitch = -89.0f;
-                    }
-
-                    float yawRad = glm::radians(camera.yaw);
-                    float pitchRad = glm::radians(camera.pitch);
-
-                    glm::vec3 front;
-                    front.x = cos(yawRad) * cos(pitchRad);
-                    front.y = sin(pitchRad);
-                    front.z = sin(yawRad) * cos(pitchRad);
-
-                    glm::vec3 cameraTarget = camera.position + glm::normalize(front);
-                    camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-                    set_camera(camera);
+                if (camera.pitch > 90.0f){
+                    camera.pitch = 90.0f;
                 }
-                float pitchRad = glm::radians(active_camera.pitch);
+                if (camera.pitch < -90.0f){
+                    camera.pitch = -90.0f;
+                }
+
+                float yawRad = glm::radians(camera.yaw);
+                float pitchRad = glm::radians(camera.pitch);
+
                 glm::vec3 front;
                 front.x = cos(yawRad) * cos(pitchRad);
                 front.y = sin(pitchRad);
                 front.z = sin(yawRad) * cos(pitchRad);
-                glm::vec3 cameraTarget = active_camera.position + glm::normalize(front);
-                active_camera.view_matrix = glm::lookAt(active_camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-                is_camera_updated = true;
-            }
-            else {}
-        }
-        if (is_camera_updated) {
-            std::cout << "HELP" << std::endl;
-            render_queue->send_camera(active_camera);
-        }
-        if (chunck == entt::null) {
-            chunck = registry.create();
-            chunks.push_back(chunck);
-            ChunkId chunk_id = ChunkId{chunks.size() - 1};
-            registry.emplace<ChunkId>(chunck, chunk_id);
-            if (chunk_id.chunk_id > chunks.size() - 1) {
-                chunks.resize(chunk_id.chunk_id + 1);
-            }
-            glm::vec3 chunk_position = glm::vec3{0.0f, 1.0f, 0.0f};
-            registry.emplace<ChunkPosition>(chunck, ChunkPosition{.position = chunk_position});
-            std::array<uint32_t, 4096> arr;
-            arr.fill(1);
-            ChunkBlockData chunk_block_data = ChunkBlockData{};
-            chunk_block_data.block_type = arr;
-            registry.emplace<ChunkBlockData>(chunck, chunk_block_data);
-            glm::mat4x4 model_matrix = create_model_matrix_chunk(chunk_position);
-            std::cout << "model matrix 1: " << std::endl;
-            printMat4(model_matrix);
-            registry.emplace<RenderData>(chunck, RenderData{.model_matrix = model_matrix});
-            registry.emplace<RenderId>(chunck, render_id);
-            Mesh chunk_mesh = Mesh{.mesh = generate_chunk_mesh(chunk_block_data, render_id.render_id)};
-            registry.emplace<Mesh>(chunck, chunk_mesh);
-            render_queue->send_mesh(chunk_mesh, render_id);
-            render_queue->send_render_data(RenderData{.model_matrix = model_matrix}, render_id);
 
-            entt::entity chunck2 = registry.create();
-            chunks.push_back(chunck2);
-            ChunkId chunk_id2 = ChunkId{chunks.size() - 1};
-            registry.emplace<ChunkId>(chunck2, chunk_id2);
-            if (chunk_id2.chunk_id > chunks.size() - 1) {
-                chunks.resize(chunk_id2.chunk_id + 1);
+                glm::vec3 cameraTarget = camera.position + glm::normalize(front);
+                camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+                set_camera(camera);
             }
-            glm::vec3 chunk_position2 = glm::vec3{0.0f, 2.0f, 0.0f};
-            registry.emplace<ChunkPosition>(chunck2, ChunkPosition{.position = chunk_position2});
-            std::array<uint32_t, 4096> arr2;
-            arr2.fill(1);
-            ChunkBlockData chunk_block_data2 = ChunkBlockData{};
-            chunk_block_data2.block_type = arr2;
-            registry.emplace<ChunkBlockData>(chunck2, chunk_block_data2);
-            glm::mat4x4 model_matrix2 = create_model_matrix_chunk(chunk_position2);
-            std::cout << "model matrix 2: " << std::endl;
-            printMat4(model_matrix2);
-            registry.emplace<RenderData>(chunck2, RenderData{.model_matrix = model_matrix2});
-            RenderId render_id2 = RenderId{.render_id = 1};
-            registry.emplace<RenderId>(chunck2, render_id2);
-            Mesh chunk_mesh2 = Mesh{.mesh = generate_chunk_mesh(chunk_block_data2, render_id2.render_id)};
-            registry.emplace<Mesh>(chunck2, chunk_mesh2);
-            render_queue->send_mesh(chunk_mesh2, render_id2);
-            render_queue->send_render_data(RenderData{.model_matrix = model_matrix2}, render_id2);
-
+            float pitchRad = glm::radians(game_data.camera.pitch);
+            glm::vec3 front;
+            front.x = cos(yawRad) * cos(pitchRad);
+            front.y = sin(pitchRad);
+            front.z = sin(yawRad) * cos(pitchRad);
+            glm::vec3 cameraTarget = game_data.camera.position + glm::normalize(front);
+            game_data.camera.view_matrix = glm::lookAt(game_data.camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
         }
+        const glm::vec2 chunk_pos_player = glm::vec2{std::floor(game_data.camera.position.x / 16.0f), std::floor(game_data.camera.position.y / 16.0f)};
+        std::vector<entt::entity> chunks_to_remove = {};
+        for (const std::pair<const glm::vec<3, float>, entt::entity>& chunk : chunks) {
+            float dx = chunk.first.x - chunk_pos_player.x;
+            float dy = chunk.first.y - chunk_pos_player.y;
+            float chunk_to_player_distance_sqaured = (dx * dx) + (dy * dy);
+            if (chunk_to_player_distance_sqaured > render_distance * render_distance) {
+                chunks_to_remove.push_back(chunk.second);
+            }
+        }
+        std::vector<glm::vec2> missing_chunks = {};
+        for (int dx = -static_cast<int>(render_distance); dx <= static_cast<int>(render_distance); ++dx) {
+            for (int dy = -static_cast<int>(render_distance); dy <= static_cast<int>(render_distance); ++dy) {
+                if (dx * dx + dy * dy > render_distance * render_distance) continue;
+                glm::vec2 target{chunk_pos_player.x + dx, chunk_pos_player.y + dy};
+                bool found = false;
+                for (const auto& [key, entity] : chunks) {
+                    if (key.x == target.x && target.y == key.y) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    missing_chunks.push_back(target);
+                }
+            }
+        }
+        for (entt::entity& to_remove : chunks_to_remove) {
+            ChunkPosition chunk_position = {};
+            try {
+                 chunk_position = registry.get<ChunkPosition>(to_remove);
+            }
+            catch (const std::bad_function_call& e) {
+                std::cout << e.what() << std::endl;
+                throw std::runtime_error("why the fuck is this");
+            }
+            for (auto it = chunks.begin(); it != chunks.end(); ) {
+                if (it->first.x == chunk_position.position.x &&
+                    it->first.y == chunk_position.position.y &&
+                    it->first.z == chunk_position.position.z) {
+                    registry.destroy(it->second);
+                    chunks.erase(it);
+                    break;
+                    }
+                else {
+                    ++it;
+                }
+            }
+        }
+        std::cout << "loop_start" << std::endl;
+        for (const glm::vec2& missing_chunk_pos : missing_chunks) {
+            std::vector<ChunkData> chunk = generate_chunk(missing_chunk_pos.x, missing_chunk_pos.y);
+            for (const ChunkData& chunk_piece : chunk) {
+                entt::entity entity = chunk_piece.entity;
+                registry.emplace<ChunkId>(entity, chunk_piece.chunk_id);
+                registry.emplace<ChunkPosition>(entity, chunk_piece.chunk_position);
+                registry.emplace<ChunkBlockData>(entity, chunk_piece.chunk_block_data);
+                registry.emplace<RenderId>(entity, RenderId{render_id});
+                std::vector<float> mesh_data = generate_chunk_mesh(chunk_piece.chunk_block_data, render_id);
+                glm::mat4x4 model_matrix_data = create_model_matrix_chunk(chunk_piece.chunk_position.position);
+                Mesh mesh = Mesh{.mesh = mesh_data};
+                ObjectRenderData model_matrix = ObjectRenderData{.model_matrix = model_matrix_data};
+                registry.emplace<ObjectRenderData>(entity,model_matrix);
+                registry.emplace<Mesh>(entity, mesh);
+                std::cout << "time:" << render_id << "time:" << game_data.model_matrices.size() << "time:" << game_data.object_vertex_data.size() << std::endl;
+                if (render_id >= game_data.model_matrices.size()) {
+                    game_data.model_matrices.resize(render_id + 1);
+                }
+                if (render_id >= game_data.object_vertex_data.size()) {
+                    game_data.object_vertex_data.resize(render_id + 1);
+                }
+                game_data.model_matrices.at(render_id) = model_matrix;
+                game_data.object_vertex_data.at(render_id) = mesh_data;
+                chunks.emplace(chunk_piece.chunk_position.position, entity);
+                render_id++;
+            }
+        }
+        std::cout << "loop_end" << std::endl;
+        swap_data();
         while (clock::now() < target) {
             std::this_thread::yield();
         }
-        clock::time_point end = clock::now();
-        std::chrono::microseconds real = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        std::cout << "real loop: " << real.count() << " us\n";
     }
 
 }
@@ -387,102 +362,11 @@ void GameSimulation::stop() {
     running = false;
 }
 
-event_available_type RenderQueue::is_event_available() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (!mesh_queue.empty()) {
-        return event_available_type::MESH;
-    }
-    if (!render_data_queue.empty()) {
-        return event_available_type::RENDER_DATA;
-    }
-    if (!input_data_queue.empty()) {
-        return event_available_type::INPUT;
-    }
-    if (!camera_queue.empty()) {
-        return event_available_type::CAMERA;
-    }
-    return event_available_type::NONE;
-}
 
-void RenderQueue::wait_for_event() {
-    std::unique_lock<std::mutex> lock(mutex);
-    cv.wait(lock, [this] {
-        return !mesh_queue.empty() || !render_data_queue.empty();
-    });
-}
-
-void RenderQueue::send_input(const std::string& input, const double& deltax, const double& deltaY) {
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        InputData input_data = InputData{input, deltax, deltaY};
-        input_data_queue.push(input_data);
+void GameSimulation::swap_data() {
+    if (render_for_swap->lock.try_lock_for(std::chrono::milliseconds(100))) {
+        render_for_swap->game_data = this->game_data;
+        std::swap(render_for_swap->game_data, this->game_data);
+        render_for_swap->lock.unlock();
     }
-    cv.notify_one();
-}
-
-void RenderQueue::send_render_data(const RenderData& render_data, RenderId render_id) {
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        RenderDataAndId render_data_and_id = RenderDataAndId{.render_data = render_data, .render_id = render_id.render_id};
-        render_data_queue.push(render_data_and_id);
-    }
-    cv.notify_one();
-}
-
-void RenderQueue::send_mesh(const Mesh& mesh, RenderId render_id) {
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        MeshAndId mesh_and_id = MeshAndId{.mesh = mesh.mesh, .render_id = render_id.render_id};
-        mesh_queue.push(mesh_and_id);
-    }
-    cv.notify_one();
-}
-
-void RenderQueue::send_camera(const Camera& camera) {
-    std::lock_guard<std::mutex> lock(mutex);
-    camera_queue.push(camera);
-}
-
-Result<Camera> RenderQueue::get_camera_data() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (camera_queue.empty()) {
-        ErrorType error_type = ErrorType::QUEUE_EMPTY;
-        return Result<Camera>{error_type};
-    }
-    Camera camera_data = camera_queue.front();
-    camera_queue.pop();
-    return Result<Camera>{camera_data};
-}
-
-Result<InputData> RenderQueue::get_input_data() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (input_data_queue.empty()) {
-        ErrorType error_type = ErrorType::QUEUE_EMPTY;
-        return Result<InputData>{error_type};
-    }
-    InputData input_data = input_data_queue.front();
-    input_data_queue.pop();
-    return Result<InputData>{input_data};
-}
-
-Result<RenderDataAndId> RenderQueue::get_render_data() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (render_data_queue.empty()) {
-        ErrorType error_type = ErrorType::QUEUE_EMPTY;
-        return Result<RenderDataAndId>{error_type};
-    }
-    RenderDataAndId render_data_and_id = render_data_queue.front();
-    render_data_queue.pop();
-    return Result<RenderDataAndId>{render_data_and_id};
-}
-
-Result<MeshAndId> RenderQueue::get_mesh() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (mesh_queue.empty()) {
-        ErrorType error_type = ErrorType::QUEUE_EMPTY;
-        return Result<MeshAndId>{error_type};
-    }
-    MeshAndId mesh_and_id = mesh_queue.front();
-    mesh_queue.pop();
-    return Result<MeshAndId>{mesh_and_id};
 }
