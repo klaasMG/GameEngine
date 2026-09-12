@@ -382,7 +382,6 @@ void GameSimulation::run() {
             camera_ray_origin = ray_origin;
             camera_ray_direction = ray_direction;
 
-
             is_mouse_moved = false;
         }
         std::chrono::milliseconds time_for_lock = std::chrono::duration_cast<std::chrono::milliseconds>(target - clock::now());
