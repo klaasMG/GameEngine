@@ -142,7 +142,7 @@ std::vector<ChunkData> GameSimulation::generate_chunk(const int64_t& pos_x, cons
     std::array<uint32_t, 4096> arr;
     arr.fill(1);
     ChunkBlockData block_data = ChunkBlockData{.block_type = arr};
-    ChunkPosition position = ChunkPosition{.position = {pos_x, pos_z, 0}};
+    ChunkPosition position = ChunkPosition{.position = {pos_x, 0, pos_z}};
     ChunkData chunk_data = ChunkData{.chunk_id = chunk_id, .chunk_block_data = block_data, .chunk_position = position, .entity = chunk};
     chunks_data.push_back(chunk_data);
     entt::entity chunk1 = registry.create();
@@ -151,7 +151,7 @@ std::vector<ChunkData> GameSimulation::generate_chunk(const int64_t& pos_x, cons
     std::array<uint32_t, 4096> arr1;
     arr1.fill(1);
     ChunkBlockData block_data1 = ChunkBlockData{.block_type = arr1};
-    ChunkPosition position1 = ChunkPosition{.position = {pos_x, pos_z, 1}};
+    ChunkPosition position1 = ChunkPosition{.position = {pos_x, 1, pos_z}};
     ChunkData chunk_data1 = ChunkData{.chunk_id = chunk_id1, .chunk_block_data = block_data1, .chunk_position = position1, .entity = chunk1};
     chunks_data.push_back(chunk_data1);
     return chunks_data;
@@ -203,6 +203,7 @@ void GameSimulation::run() {
     };
     using clock = std::chrono::high_resolution_clock;
     while (running) {
+        bool is_mouse_moved = false;
         clock::time_point start = clock::now();
         clock::time_point target = start + std::chrono::milliseconds(10);
         while (!input_queue_ptr->empty()) {
@@ -251,18 +252,16 @@ void GameSimulation::run() {
                 if (camera.pitch < -90.0f){
                     camera.pitch = -90.0f;
                 }
-
                 float yawRad = glm::radians(camera.yaw);
                 float pitchRad = glm::radians(camera.pitch);
-
                 glm::vec3 front;
                 front.x = cos(yawRad) * cos(pitchRad);
                 front.y = sin(pitchRad);
                 front.z = sin(yawRad) * cos(pitchRad);
-
                 glm::vec3 cameraTarget = camera.position + glm::normalize(front);
                 camera.view_matrix = glm::lookAt(camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
                 set_camera(camera);
+                is_mouse_moved = true;
             }
             float pitchRad = glm::radians(game_data.camera.pitch);
             glm::vec3 front;
@@ -272,24 +271,34 @@ void GameSimulation::run() {
             glm::vec3 cameraTarget = game_data.camera.position + glm::normalize(front);
             game_data.camera.view_matrix = glm::lookAt(game_data.camera.position, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
         }
-        const glm::vec2 chunk_pos_player = glm::vec2{std::floor(game_data.camera.position.x / 16.0f), std::floor(game_data.camera.position.y / 16.0f)};
+        if (screen_size_last != game_data.screen_size) {
+            game_data.camera.projection_matrix = glm::perspective(
+                glm::radians(60.0f),
+                game_data.screen_size.at(0) / game_data.screen_size.at(1),
+                0.1f,
+                5000.0f
+            );
+            screen_size_last = game_data.screen_size;
+        }
+        const glm::vec2 chunk_pos_player = glm::vec2{std::floor(game_data.camera.position.x / 16.0f), std::floor(game_data.camera.position.z / 16.0f)};
         std::vector<entt::entity> chunks_to_remove = {};
         for (const std::pair<const glm::vec<3, float>, entt::entity>& chunk : chunks) {
             float dx = chunk.first.x - chunk_pos_player.x;
-            float dy = chunk.first.y - chunk_pos_player.y;
-            float chunk_to_player_distance_sqaured = (dx * dx) + (dy * dy);
+            float dz = chunk.first.z - chunk_pos_player.y;
+            float chunk_to_player_distance_sqaured = (dx * dx) + (dz * dz);
             if (chunk_to_player_distance_sqaured > render_distance * render_distance) {
                 chunks_to_remove.push_back(chunk.second);
             }
         }
         std::vector<glm::vec2> missing_chunks = {};
         for (int dx = -static_cast<int>(render_distance); dx <= static_cast<int>(render_distance); ++dx) {
-            for (int dy = -static_cast<int>(render_distance); dy <= static_cast<int>(render_distance); ++dy) {
-                if (dx * dx + dy * dy > render_distance * render_distance) continue;
-                glm::vec2 target{chunk_pos_player.x + dx, chunk_pos_player.y + dy};
+            for (int dz = -static_cast<int>(render_distance); dz <= static_cast<int>(render_distance); ++dz) {
+                if (dx * dx + dz * dz > render_distance * render_distance) continue;
+                glm::vec2 target{chunk_pos_player.x + dx, chunk_pos_player.y + dz};
                 bool found = false;
-                for (const auto& [key, entity] : chunks) {
-                    if (key.x == target.x && target.y == key.y) {
+                for (const std::pair<const glm::vec3, entt::entity>& chunk : chunks) {
+                    const glm::vec<3, float> key = chunk.first;
+                    if (key.x == target.x && target.y == key.z) {
                         found = true;
                         break;
                     }
@@ -308,10 +317,17 @@ void GameSimulation::run() {
                 std::cout << e.what() << std::endl;
                 throw std::runtime_error("why the fuck is this");
             }
+            catch (const std::runtime_error& e) {
+                std::cout << e.what() << std::endl;
+                throw std::runtime_error("fuck off");
+            }
             for (auto it = chunks.begin(); it != chunks.end(); ) {
                 if (it->first.x == chunk_position.position.x &&
                     it->first.y == chunk_position.position.y &&
                     it->first.z == chunk_position.position.z) {
+                    RenderId render_id_for_deleting = registry.get<RenderId>(to_remove);
+                    free_render_ids.push(render_id_for_deleting.render_id);
+                    game_data.object_vertex_data.at(render_id_for_deleting.render_id) = {};
                     registry.destroy(it->second);
                     chunks.erase(it);
                     break;
@@ -321,7 +337,6 @@ void GameSimulation::run() {
                 }
             }
         }
-        std::cout << "loop_start" << std::endl;
         for (const glm::vec2& missing_chunk_pos : missing_chunks) {
             std::vector<ChunkData> chunk = generate_chunk(missing_chunk_pos.x, missing_chunk_pos.y);
             for (const ChunkData& chunk_piece : chunk) {
@@ -329,28 +344,49 @@ void GameSimulation::run() {
                 registry.emplace<ChunkId>(entity, chunk_piece.chunk_id);
                 registry.emplace<ChunkPosition>(entity, chunk_piece.chunk_position);
                 registry.emplace<ChunkBlockData>(entity, chunk_piece.chunk_block_data);
-                registry.emplace<RenderId>(entity, RenderId{render_id});
-                std::vector<float> mesh_data = generate_chunk_mesh(chunk_piece.chunk_block_data, render_id);
+                size_t render_id_local = render_id;
+                if (!free_render_ids.empty()) {
+                    render_id_local = free_render_ids.front();
+                    free_render_ids.pop();
+                }
+                else {
+                    render_id++;
+                }
+                registry.emplace<RenderId>(entity, RenderId{render_id_local});
+                std::vector<float> mesh_data = generate_chunk_mesh(chunk_piece.chunk_block_data, render_id_local);
                 glm::mat4x4 model_matrix_data = create_model_matrix_chunk(chunk_piece.chunk_position.position);
                 Mesh mesh = Mesh{.mesh = mesh_data};
                 ObjectRenderData model_matrix = ObjectRenderData{.model_matrix = model_matrix_data};
                 registry.emplace<ObjectRenderData>(entity,model_matrix);
                 registry.emplace<Mesh>(entity, mesh);
-                std::cout << "time:" << render_id << "time:" << game_data.model_matrices.size() << "time:" << game_data.object_vertex_data.size() << std::endl;
-                if (render_id >= game_data.model_matrices.size()) {
-                    game_data.model_matrices.resize(render_id + 1);
+                if (render_id_local >= game_data.model_matrices.size()) {
+                    game_data.model_matrices.resize(render_id_local + 1);
                 }
-                if (render_id >= game_data.object_vertex_data.size()) {
-                    game_data.object_vertex_data.resize(render_id + 1);
+                if (render_id_local >= game_data.object_vertex_data.size()) {
+                    game_data.object_vertex_data.resize(render_id_local + 1);
                 }
-                game_data.model_matrices.at(render_id) = model_matrix;
-                game_data.object_vertex_data.at(render_id) = mesh_data;
+                game_data.model_matrices.at(render_id_local) = model_matrix;
+                game_data.object_vertex_data.at(render_id_local) = mesh_data;
                 chunks.emplace(chunk_piece.chunk_position.position, entity);
-                render_id++;
             }
         }
-        std::cout << "loop_end" << std::endl;
-        swap_data();
+        if (is_mouse_moved) {
+            glm::vec2 mouse_pos = {game_data.screen_size.at(0) / 2.0, game_data.screen_size.at(1) / 2.0};
+            float x_ndc = (2.0 * mouse_pos.x) / game_data.screen_size.at(0) - 1;
+            float y_ndc = 1.0 - ((2.0 * mouse_pos.y) / game_data.screen_size.at(1));
+            glm::vec4 P_ndc = glm::vec4{x_ndc, y_ndc, -1.0f, -1.0f};
+            glm::vec4 P_world = glm::inverse(game_data.camera.projection_matrix * game_data.camera.view_matrix) * P_ndc;
+            P_world = P_world / P_world.w;
+            glm::vec4 ray_origin = glm::vec4{game_data.camera.position, 1.0};
+            glm::vec4 ray_direction = glm::normalize(P_world - ray_origin);
+            camera_ray_origin = ray_origin;
+            camera_ray_direction = ray_direction;
+
+
+            is_mouse_moved = false;
+        }
+        std::chrono::milliseconds time_for_lock = std::chrono::duration_cast<std::chrono::milliseconds>(target - clock::now());
+        swap_data(time_for_lock);
         while (clock::now() < target) {
             std::this_thread::yield();
         }
@@ -363,8 +399,8 @@ void GameSimulation::stop() {
 }
 
 
-void GameSimulation::swap_data() {
-    if (render_for_swap->lock.try_lock_for(std::chrono::milliseconds(100))) {
+void GameSimulation::swap_data(const std::chrono::milliseconds& time) {
+    if (render_for_swap->lock.try_lock_for(time)) {
         render_for_swap->game_data = this->game_data;
         std::swap(render_for_swap->game_data, this->game_data);
         render_for_swap->lock.unlock();

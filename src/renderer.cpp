@@ -8,8 +8,6 @@
 #include <regex>
 #include <vector>
 
-#include "lib/Error.h"
-
 std::vector<float> flatten_vector(const std::vector<std::vector<float>>& input) {
     std::vector<float> output;
 
@@ -127,19 +125,12 @@ void Renderer::destroy_render_data_ssbo() {
 }
 
 void Renderer::framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-         glViewport(0, 0, width, height);
-         Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
-         if (renderer && width > 0 && height > 0) {
-             renderer->lock.lock();
-             renderer->game_data.camera.projection_matrix = glm::perspective(
-                 glm::radians(60.0f),
-                 (float)width / (float)height,
-                 0.1f,
-                 5000.0f
-             );
-             renderer->lock.unlock();
-         }
-     }
+    glViewport(0, 0, width, height);
+    Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
+    renderer->lock.lock();
+    renderer->game_data.screen_size = {static_cast<float>(width), static_cast<float>(height)};
+    renderer->lock.unlock();
+}
 
 void Renderer::mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     Renderer* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
@@ -377,7 +368,9 @@ void Renderer::run() {
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
             input_queue_ptr->send_key(KeyInputData{.key = "shift"});
         }
+        lock.lock();
         std::vector<float> vertices_in = flatten_vector(game_data.object_vertex_data);
+        lock.unlock();
         update_triangle(vertices_in);
         update_camera_ubo();
         update_render_data_ssbo();

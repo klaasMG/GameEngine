@@ -15,6 +15,7 @@ struct ObjectRenderData {
 struct GameData {
     std::vector<ObjectRenderData> model_matrices = {ObjectRenderData{.model_matrix = glm::mat4(1.0f)}};
     std::vector<std::vector<float>> object_vertex_data = {{}};
+    std::array<float, 2> screen_size = {800.0, 600.0};
     Camera camera = Camera{
         .projection_matrix = glm::perspective(glm::radians(60.0f), (float)800.0 / (float)600.0, 0.1f, 5000.0f),
         .view_matrix = glm::mat4(1.0f),
